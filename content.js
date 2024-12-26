@@ -26,8 +26,10 @@ style.textContent = `
     padding: 5px;
     border-radius: 4px;
     max-width: 500px;
-    max-height: 500px;
+    max-height: 90vh;
     overflow: hidden;
+    display: flex;
+    align-items: center;
   }
 
   .hover-preview::before {
@@ -44,8 +46,11 @@ style.textContent = `
   .hover-preview img,
   .hover-preview video {
     max-width: 100%;
-    max-height: 100%;
+    max-height: 80vh;
     display: block;
+    object-fit: contain;
+    width: auto;
+    height: auto;
   }
 
   .preview-counter {
@@ -85,49 +90,16 @@ style.textContent = `
       transform: rotate(360deg);
     }
   }
+
+  .preview-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 `;
 document.head.appendChild(style);
-
-const preview = document.createElement("div");
-preview.className = "hover-preview";
-document.body.appendChild(preview);
-
-document.addEventListener("mousemove", (e) => {
-  if (
-    preview.style.display === "none" &&
-    !isPreviewFrozen &&
-    e.target.closest("a") === currentLink
-  ) {
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    const previewRect = preview.getBoundingClientRect();
-    const previewWidth = previewRect.width;
-    const previewHeight = previewRect.height;
-
-    let left = e.pageX + settings.cursorOffset;
-    let top = e.pageY + settings.cursorOffset;
-
-    if (left + previewWidth > viewportWidth) {
-      left = e.clientX - previewWidth - settings.cursorOffset;
-    }
-
-    if (top + previewHeight > viewportHeight) {
-      top = e.clientY - previewHeight - settings.cursorOffset;
-    }
-
-    left = Math.max(0, left);
-    top = Math.max(0, top);
-
-    const cursorX = e.pageX;
-    const cursorY = e.pageY;
-
-    preview.style.setProperty("--cursor-x", `${cursorX}px`);
-    preview.style.setProperty("--cursor-y", `${cursorY}px`);
-    preview.style.left = `${left}px`;
-    preview.style.top = `${top}px`;
-  }
-});
 
 let currentLink = null;
 let currentImageIndex = 0;
@@ -194,22 +166,67 @@ function isMediaURL(url) {
 }
 
 async function showPreview(url) {
-  if (!preview) return;
-  preview.innerHTML = "";
+  const existingPreview = document.querySelector(".hover-preview");
+  if (existingPreview) {
+    existingPreview.remove();
+  }
+
+  const preview = document.createElement("div");
+  preview.className = "hover-preview";
+  preview.style.display = "none";
+  document.body.appendChild(preview);
 
   const contentWrapper = document.createElement("div");
   contentWrapper.className = "preview-content";
-
-  if (preview.isConnected) {
-    preview.appendChild(contentWrapper);
-  } else {
-    return;
-  }
+  preview.appendChild(contentWrapper);
 
   const loader = document.createElement("div");
   loader.className = "preview-loader";
   contentWrapper.appendChild(loader);
   preview.style.display = "block";
+
+  const moveHandler = (e) => {
+    if (e.target.closest("a") !== currentLink) {
+      preview.remove();
+      document.removeEventListener("mousemove", moveHandler);
+      return;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const previewRect = preview.getBoundingClientRect();
+    const previewWidth = previewRect.width;
+    const previewHeight = previewRect.height;
+
+    let left = e.clientX + settings.cursorOffset;
+    let top = e.clientY + settings.cursorOffset - 100;
+
+    if (left + previewWidth > viewportWidth) {
+      left = e.clientX - previewWidth - settings.cursorOffset;
+    }
+
+    if (top + previewHeight > viewportHeight) {
+      top = e.clientY - previewHeight - settings.cursorOffset;
+    }
+
+    left = Math.max(0, left);
+    top = Math.max(0, top);
+
+    preview.style.setProperty("--cursor-x", `${e.clientX}px`);
+    preview.style.setProperty("--cursor-y", `${e.clientY}px`);
+    preview.style.left = `${left}px`;
+    preview.style.top = `${top}px`;
+  };
+
+  document.addEventListener("mousemove", moveHandler);
+
+  preview.addEventListener("mouseout", (e) => {
+    if (isPreviewFrozen) return;
+    if (!e.relatedTarget || !e.relatedTarget.closest(".hover-preview")) {
+      preview.remove();
+      document.removeEventListener("mousemove", moveHandler);
+    }
+  });
 
   if (url && url.includes("imgur.com") && currentImages.length <= 1) {
     let imgurId;
@@ -295,7 +312,6 @@ function displayMedia(url, contentWrapper, loader) {
 
     const tryNextQuality = () => {
       if (qualityIndex >= qualities.length) {
-        // Try HLS format as last resort
         video.src = `${url}/HLSPlaylist.m3u8`;
         video.onerror = () => {
           loader.classList.add("error");
@@ -314,6 +330,8 @@ function displayMedia(url, contentWrapper, loader) {
     video.autoplay = settings.autoplayVideos;
     video.muted = settings.muteVideos;
     video.loop = true;
+    video.controls = true;
+    video.style.maxHeight = "80vh";
     video.onloadeddata = () => {
       const counter = contentWrapper.querySelector(".preview-counter");
       contentWrapper.innerHTML = "";
@@ -356,8 +374,10 @@ function displayMedia(url, contentWrapper, loader) {
 
 function hidePreview() {
   if (isPreviewFrozen) return;
-  preview.style.display = "none";
-  preview.innerHTML = "";
+  const preview = document.querySelector(".hover-preview");
+  if (preview) {
+    preview.remove();
+  }
 }
 
 let isPreviewFrozen = false;
